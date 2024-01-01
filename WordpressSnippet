@@ -1,0 +1,293 @@
+Wordpress Snippet
+
+/* Create Buy Now Button dynamically after Add To Cart button */
+    function add_content_after_addtocart() {
+    
+        // get the current post/product ID
+        $current_product_id = get_the_ID();
+    
+        // get the product based on the ID
+        $product = wc_get_product( $current_product_id );
+    
+        // get the "Checkout Page" URL
+        $checkout_url = WC()->cart->get_checkout_url();
+    
+        // run only on simple products
+        if( $product->is_type( 'simple' ) ){
+            echo '<a href="'.$checkout_url.'?add-to-cart='.$current_product_id.'" class="buy-now button">Buy Now</a>';
+            //echo '<a href="'.$checkout_url.'" class="buy-now button">Buy Now</a>';
+        }
+    }
+    add_action( 'woocommerce_after_add_to_cart_button', 'add_content_after_addtocart' );
+
+
+
+// Replace Shpping Title
+
+add_filter( 'gettext', 'ecommercehints_change_billing_shipping_heading', 10, 3 );
+
+function ecommercehints_change_billing_shipping_heading( $translated, $untranslated, $domain ) {
+if ( !is_admin() && $domain === "woocommerce" ) {
+if ( $translated == 'Billing & Shipping' ) { // The exact text to replace (the existing heading)
+$translated = 'Billing & Shipping Details'; // The new text
+}
+}
+return $translated;
+}
+
+
+// Checkout Field
+
+
+    add_filter('woocommerce_create_account_default_checked', '__return_true');
+
+
+
+    add_filter('woocommerce_terms_is_checked_default', '__return_true');
+// add_filter( 'woocommerce_enable_order_notes_field', '__return_false' );
+
+
+// BEST SELLER PRODUCT
+/**
+ * Track user woocommerce viewed products.
+ */
+function dorzki_wc_track_product_views() {
+
+	if( ! is_singular( 'product' ) || is_active_widget( false, false, 'woocommerce_recently_viewed_products', true ) ) {
+		return;
+	}
+
+	global $post;
+
+	if ( empty( $_COOKIE['woocommerce_recently_viewed'] ) ) {
+
+		$viewed_products = array();
+
+	} else {
+
+		$viewed_products = wp_parse_id_list( (array) explode( '|', wp_unslash( $_COOKIE['woocommerce_recently_viewed'] ) ) );
+
+	}
+
+	$keys = array_flip( $viewed_products );
+
+	if ( isset( $keys[ $post->ID ] ) ) {
+
+		unset( $viewed_products[ $keys[ $post->ID ] ] );
+
+	}
+
+	$viewed_products[] = $post->ID;
+
+	if ( count( $viewed_products ) > 15 ) {
+
+		array_shift( $viewed_products );
+
+	}
+
+	wc_setcookie( 'woocommerce_recently_viewed', implode( '|', $viewed_products ) );
+
+}
+
+add_action( 'template_redirect', 'dorzki_wc_track_product_views', 20 );
+/**
+ * Display recently viewed products.
+ */
+function dorzki_wc_display_products_viewed() {
+
+	if ( empty( $_COOKIE['woocommerce_recently_viewed'] ) ) {
+		return;
+	}
+
+	$total_products = apply_filters( 'loop_shop_columns', get_option( 'woocommerce_catalog_columns', 4 ) );
+	$viewed_products = wp_parse_id_list( (array) explode( '|', wp_unslash( $_COOKIE['woocommerce_recently_viewed'] ) ) );
+
+	$products = array_slice( $viewed_products, 0, $total_products );
+	$ids = implode( ',', $products );
+
+	echo "<h2>" . esc_html__( 'Recently Viewed Products', 'dorzki' ) . "</h2>";
+	echo do_shortcode( "[products ids='{$ids}']" );
+
+}
+
+add_action( 'woocommerce_after_cart', 'dorzki_wc_display_products_viewed' );
+add_action( 'woocommerce_after_checkout_form', 'dorzki_wc_display_products_viewed' );
+add_action( 'woocommerce_after_single_product', 'dorzki_wc_display_products_viewed' );
+
+
+// Restrct order status
+ add_filter( 'wcfm_allowed_order_status', function( $order_status ) {
+	if( isset( $order_status['wc-shipped'] ) ) unset( $order_status['wc-shipped'] );
+	if( isset( $order_status['wc-pending'] ) ) unset( $order_status['wc-pending'] );
+	return $order_status;
+}, 50 );
+
+//AJAX SEARCH
+/*
+ ==================
+ * WooCommerce Ajax Product Search Code
+ * Live search product Search with Category filter
+======================	 
+*/
+// ajax fetch function
+add_action( 'wp_footer', 'ajax_fetch' );
+function ajax_fetch() {
+?>
+<script type="text/javascript">
+function mukto_fetch(){
+
+    jQuery.ajax({
+        url: '<?php echo admin_url('admin-ajax.php'); ?>',
+        type: 'post',
+        data: { action: 'data_fetch', keyword: jQuery('#keyword').val(), pcat: jQuery('#cat').val() },
+        success: function(data) {
+            jQuery('#datafetch').html( data );
+        }
+    });
+
+}
+</script>
+
+<?php
+}
+
+// the ajax function
+add_action('wp_ajax_data_fetch' , 'data_fetch');
+add_action('wp_ajax_nopriv_data_fetch','data_fetch');
+function data_fetch(){
+    if ($_POST['pcat']) {
+        $product_cat_id = array(esc_attr( $_POST['pcat'] ));
+    }else {
+        $terms = get_terms( 'product_cat' ); 
+        $product_cat_id = wp_list_pluck( $terms, 'term_id' );
+    }
+    $the_query = new WP_Query( 
+        array( 
+            'posts_per_page' => -1, 
+            's' => esc_attr( $_POST['keyword'] ), 
+            'post_type' => array('product'),
+            
+            'tax_query' => array(
+                array(
+                    'taxonomy'  => 'product_cat',
+                    'field'     => 'term_id',
+                    'terms'     => $product_cat_id,
+                    'operator'  => 'IN',
+                )
+           )
+        ) 
+    );
+    if( $the_query->have_posts() ) :
+        echo '<ul>';
+        while( $the_query->have_posts() ): $the_query->the_post(); ?>
+
+            <li><a href="<?php echo esc_url( post_permalink() ); ?>"><span><?php the_post_thumbnail('thumbnail')?></span><?php the_title();?></a></li>
+
+        <?php endwhile;
+       echo '</ul>';
+        wp_reset_postdata();  
+    endif;
+
+    die();
+}
+// SHORT CODE FOR UI
+ 
+  /** my-shortcode-functions.php*/
+  // First, we declare the function
+  function pruduct_aj_search() { 
+
+  // Code to run. We store the HTML code in the $msg variable.
+  
+	  // STORE DATA
+	  $getCatLidt = '<div class="search_bar">
+    <form action="/" method="get" autocomplete="off" id="product_search">
+        <input type="text" name="s" placeholder="Search Product..." id="keyword" class="input_search" onkeyup="mukto_fetch()">
+        <select name="cat" id="cat" onchange="mukto_fetch()">
+            <option value="">All Categories</option>';
+		  
+                $terms = get_terms( array(
+                        'taxonomy'   => 'product_cat', 
+                        'hide_empty' => true, 
+                ));
+
+                // Loop through all category with a foreach loop
+                foreach( $terms as $term ) {
+                    $getCatLidt2.= '<option value="'. $term->term_id.'"> '. $term->name .' </option>';
+				}
+
+	    $getCatLidt3 = ' </select>
+    </form>
+    <div class="search_result" id="datafetch">
+        <ul>
+            <li>Please wait..</li>
+        </ul>
+    </div>
+</div>'; 
+
+// 	  style and JQ
+$stJQ = '<script>
+	jQuery(document).ready(function($) {
+		$("input#keyword").keyup(function() {
+			  if ($(this).val().length > 2) {
+				$("#datafetch").show();
+			  } else {
+				$("#datafetch").hide();
+			  }
+			});
+		});
+</script>
+	<style>div.search_result {
+    //display: none;
+}
+
+
+form {
+    display: flex;
+    justify-content: space-between;
+    max-width: 600px;
+    margin: auto;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 5px 10px;
+    border: 1px solid;
+}
+div#datafetch {
+    max-width: 600px;
+    margin: auto;
+}
+
+div#datafetch ul {
+    list-style: none;
+    padding: 0;
+    background: #1a2132;
+}
+
+div#datafetch li img {
+    max-width: 50px;
+    height: AUTO;
+}
+
+div#datafetch li {
+    padding: 5px;
+    background: #151a29;
+    margin-bottom: 5px;
+}
+
+div#datafetch ul a span {
+    display: inline-block;
+    margin-right: 10px;
+}
+
+div#datafetch a {
+    color: #fff;
+}div.search_result {
+    display: none;
+}</style>';  
+  // We return the $msg variable containing the HTML code.
+   return $getCatLidt . $getCatLidt2 .  $getCatLidt3 . $stJQ;
+  } 
+  // Finally, we register the shortcode with our custon name "abcdef". 
+  add_shortcode('pruduct_aj_search_sc', 'pruduct_aj_search');  
