@@ -291,3 +291,82 @@ div#datafetch a {
   } 
   // Finally, we register the shortcode with our custon name "abcdef". 
   add_shortcode('pruduct_aj_search_sc', 'pruduct_aj_search');  
+
+
+
+// OTP VARIFICTION DURING CHECKOUT
+
+function enqueue_firebase_sdk() {
+    wp_enqueue_script('firebase', 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js', array(), null, true);
+    wp_enqueue_script('firebase-auth', 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js', array('firebase'), null, true);
+
+    // Add your Firebase configuration here
+    wp_add_inline_script('firebase', 'var firebaseConfig = { apiKey: "AIzaSyCEZfgQQ2LV5Y_KYHFszmyUF1PaAJuBipo", authDomain: "technoxtdemo.firebaseapp.com", projectId: "technoxtdemo", storageBucket: "technoxtdemo.appspot.com", messagingSenderId: "297980821673", appId: "297980821673" }; firebase.initializeApp(firebaseConfig);');
+}
+add_action('wp_enqueue_scripts', 'enqueue_firebase_sdk');
+
+//====
+function add_otp_field_to_checkout() {
+    echo '<div id="otp-container">';
+    echo '<label for="otp">Enter OTP:</label>';
+    echo '<input type="text" name="otp" id="otp" required>';
+    echo '<button id="verify-otp" type="button">Verify OTP</button>';
+    echo '</div>';
+}
+add_action('woocommerce_before_checkout_form', 'add_otp_field_to_checkout');
+
+
+function add_recaptcha_container() {
+    echo '<div id="recaptcha-container"></div>';
+}
+add_action('woocommerce_before_checkout_form', 'add_recaptcha_container');
+
+//====
+
+function add_this_script_footer(){ ?>
+    <script type="text/javascript">
+		
+document.addEventListener('DOMContentLoaded', function () {
+    var recaptchaContainer = document.getElementById('recaptcha-container');
+    var otpContainer = document.getElementById('otp-container');
+    var verifyOtpButton = document.getElementById('verify-otp');
+
+    if (recaptchaContainer && otpContainer && verifyOtpButton) {
+        verifyOtpButton.addEventListener('click', function () {
+            var phoneNumber = document.getElementById('billing_phone').value; // Get the phone number from the WooCommerce billing_phone field
+
+            var recaptchaVerifier = new firebase.auth.RecaptchaVerifier(recaptchaContainer, {
+                size: 'invisible',
+                callback: function (response) {
+                    // reCAPTCHA verification completed
+                },
+                'expired-callback': function () {
+                    // Handle reCAPTCHA expiration
+                }
+            });
+
+  firebase.auth().signInWithPhoneNumber(phoneNumber, new firebase.auth.RecaptchaVerifier('recaptcha-container'))
+    .then(function (confirmationResult) {
+        var code = prompt('Please enter the OTP sent to your phone:');
+
+        return confirmationResult.confirm(code);
+    })
+    .then(function (result) {
+        // The user is successfully authenticated, proceed with the checkout process.
+        document.getElementById('checkout-form').submit();
+    })
+    .catch(function (error) {
+        console.error('Firebase Authentication Error:', error.code, error.message);
+        alert('Error verifying OTP. Please try again.');
+    });
+
+        });
+    }
+});
+    </script>
+<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' 'nonce-randomnonce';">
+<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-randomnonce' 'sha256-hashvalue';">
+
+<?php } 
+
+add_action('wp_footer', 'add_this_script_footer');
